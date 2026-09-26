@@ -32,7 +32,7 @@ private:
                      const QString &tgt, QString &out);
 
   QNetworkAccessManager m_net;
-  QString m_endpoint = "http://localhost:5000";
+  QString m_endpoint = "http://127.0.0.1:5001";
   QString m_apiKey;
   QString m_lastError;
 };

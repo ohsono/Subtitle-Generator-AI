@@ -276,12 +276,14 @@ SettingsPanel::SettingsPanel(QWidget *parent) : QWidget(parent) {
     cl->addLayout(formRow(card, "Target Lang:", m_tgtLangCombo, true));
 
     m_endpointEdit = new QLineEdit(card);
-    m_endpointEdit->setPlaceholderText("http://localhost:5000");
-    m_endpointEdit->setText("http://localhost:5000");
+    m_endpointEdit->setPlaceholderText("http://127.0.0.1:5001");
+    m_endpointEdit->setText("http://127.0.0.1:5001");
     cl->addLayout(formRow(card, "API Endpoint:", m_endpointEdit, true));
 
     auto *hint = new QLabel(
-        "Requires a running LibreTranslate server for offline use.", card);
+        "Requires a running LibreTranslate server for offline use, e.g. "
+        "libretranslate --port 5001 (port 5000 is taken by AirPlay on macOS).",
+        card);
     hint->setStyleSheet("color:#6E6E6E; font-size:8pt;");
     hint->setWordWrap(true);
     cl->addWidget(hint);
