@@ -25,6 +25,7 @@ struct Job {
   QString sourceLanguage;
   QString targetLanguage;
   bool enableTranslation = false;
+  QString translationEndpoint;
   bool embedSubtitles = false;
   bool fastMode = false;
 

@@ -242,8 +242,11 @@ void MainWindow::onStartProcessing() {
   QList<Job> jobs =
       m_inputPanel->buildJobs(outDir, model, srcLang, tgtLang, translate, embed,
                               fast, font, size, color, outline, align);
-  for (const Job &j : jobs)
+  const QString endpoint = m_settingsPanel->translationEndpoint().trimmed();
+  for (Job &j : jobs) {
+    j.translationEndpoint = endpoint;
     m_queue->enqueue(j);
+  }
 
   m_processor->start(parallel);
   m_sidebar->setActiveTab(2);

@@ -9,7 +9,11 @@
 
 TranslationEngine::TranslationEngine(QObject *parent) : QObject(parent) {}
 
-void TranslationEngine::setEndpoint(const QString &url) { m_endpoint = url; }
+void TranslationEngine::setEndpoint(const QString &url) {
+  m_endpoint = url;
+  while (m_endpoint.endsWith('/'))
+    m_endpoint.chop(1);
+}
 void TranslationEngine::setApiKey(const QString &key) { m_apiKey = key; }
 
 bool TranslationEngine::translate(QList<TranscriptSegment> &segments,
@@ -22,9 +26,16 @@ bool TranslationEngine::translate(QList<TranscriptSegment> &segments,
                       .arg(sourceLang)
                       .arg(targetLang));
 
+  m_lastError.clear();
   for (int i = 0; i < segments.size(); ++i) {
     TranscriptSegment &seg = segments[i];
-    QString translated = translateText(seg.text, sourceLang, targetLang);
+    QString translated;
+    if (!translateText(seg.text, sourceLang, targetLang, translated)) {
+      // Every request goes to the same server, so one failure means the rest
+      // would fail too; stop instead of repeating the error per segment.
+      emit logMessage(QString("Translation error: %1").arg(m_lastError));
+      return false;
+    }
     if (!translated.isEmpty())
       seg.text = translated;
     emit progress(static_cast<int>(100.0 * i / segments.size()));
@@ -35,9 +46,8 @@ bool TranslationEngine::translate(QList<TranscriptSegment> &segments,
   return true;
 }
 
-QString TranslationEngine::translateText(const QString &text,
-                                         const QString &src,
-                                         const QString &tgt) {
+bool TranslationEngine::translateText(const QString &text, const QString &src,
+                                      const QString &tgt, QString &out) {
   QUrl url(m_endpoint + "/translate");
   QNetworkRequest request(url);
   request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
@@ -57,17 +67,32 @@ QString TranslationEngine::translateText(const QString &text,
   QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
   loop.exec();
 
-  QString result;
-  if (reply->error() == QNetworkReply::NoError) {
-    QByteArray data = reply->readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(data);
-    result = doc.object().value("translatedText").toString();
+  const QJsonObject obj = QJsonDocument::fromJson(reply->readAll()).object();
+  bool ok = false;
+  if (reply->error() == QNetworkReply::NoError &&
+      obj.contains("translatedText")) {
+    out = obj.value("translatedText").toString();
+    ok = true;
+  } else if (reply->rawHeader("Server").startsWith("AirTunes")) {
+    // macOS AirPlay Receiver listens on port 5000, LibreTranslate's default,
+    // and answers every request with 403.
+    m_lastError =
+        QString("%1 is macOS AirPlay Receiver, not a translation server. Run "
+                "LibreTranslate on another port (e.g. --port 5001) and set it "
+                "as the API endpoint in Settings, or turn off AirPlay Receiver "
+                "in System Settings > General > AirDrop & Handoff")
+            .arg(m_endpoint);
+  } else if (obj.contains("error")) {
+    m_lastError = QString("%1 (%2)").arg(obj.value("error").toString(),
+                                         reply->errorString());
+  } else if (reply->error() != QNetworkReply::NoError) {
+    m_lastError = reply->errorString();
   } else {
-    emit logMessage(QString("Translation error: %1").arg(reply->errorString()));
+    m_lastError = QString("Unexpected response from %1").arg(url.toString());
   }
 
   reply->deleteLater();
-  return result;
+  return ok;
 }
 
 QStringList TranslationEngine::supportedLanguages() {

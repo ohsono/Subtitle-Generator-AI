@@ -75,12 +75,19 @@ void ProcessingWorker::run() {
     return;
   }
 
+  QString translationError;
   if (m_job.enableTranslation && !m_job.targetLanguage.isEmpty()) {
     emit progress(m_job.id, 86, "Translating");
     TranslationEngine translator;
+    if (!m_job.translationEndpoint.isEmpty())
+      translator.setEndpoint(m_job.translationEndpoint);
     connect(&translator, &TranslationEngine::logMessage,
             [](const QString &msg) { LOG_INFO(msg); });
-    translator.translate(segments, m_job.sourceLanguage, m_job.targetLanguage);
+    // Keep going on failure so the transcription is not lost, but report the
+    // job as failed at the end instead of silently shipping untranslated text.
+    if (!translator.translate(segments, m_job.sourceLanguage,
+                              m_job.targetLanguage))
+      translationError = translator.lastError();
   }
 
   emit progress(m_job.id, 88, "Writing SRT");
@@ -116,6 +123,13 @@ void ProcessingWorker::run() {
   }
 
   QFile::remove(tempWav);
+  if (!translationError.isEmpty()) {
+    emit failed(m_job.id,
+                QString("Translation failed: %1. Untranslated subtitles were "
+                        "saved to %2")
+                    .arg(translationError, m_job.outputSrtPath));
+    return;
+  }
   emit progress(m_job.id, 100, "Complete");
   emit finished(m_job.id, m_job.outputSrtPath);
   LOG_INFO(QString("Job #%1 finished").arg(m_job.id));
